@@ -25,7 +25,8 @@
             size: { type: [ Number, String ], default: 40 },
             col: { type: Number, default: 0 },
             row: { type: Number, default: 0 },
-            color: { type: String, default: 'green' }
+            color: { type: String, default: 'green' },
+            player: { type: Object }
         },
 
         data: function () {
@@ -37,13 +38,8 @@
         },
 
         mounted: function() {
-            this.$data.x = this.col * this.size;
-            this.$data.y = this.row * this.size;
-            let anim = (time) => {
-                this.play && requestAnimationFrame(anim);
-                TWEEN.update(time);
-            }
-            requestAnimationFrame(anim);
+            this.x = this.player.x * this.size;
+            this.y = this.player.y * this.size;
         },
 
         computed: {
@@ -54,15 +50,21 @@
         },
 
         watch: {
-            col: function(newValue) {
+            'player.x': function(newValue) {
+                this.player.hasControl = false;
                 new TWEEN.Tween(this.$data)
-                    .to({x: newValue * this.size}, 200)
-                    .start();
+                  .to({x: newValue * this.size}, this.player.speed)
+                  .easing(TWEEN.Easing.Linear.None)
+                  .onComplete(() => { this.player.hasControl = true; })
+                  .start();
             },
-            row: function(newValue) {
+            'player.y': function(newValue) {
+                this.player.hasControl = false;
                 new TWEEN.Tween(this.$data)
-                    .to({y: newValue * this.size}, 200)
-                    .start();
+                  .to({y: newValue * this.size}, this.player.speed)
+                  .easing(TWEEN.Easing.Linear.None)
+                  .onComplete(() => { this.player.hasControl = true; })
+                  .start();
             },
             size: function(newValue) {
                 this.$data.x = this.col * newValue;
@@ -75,4 +77,3 @@
 
 <style lang="scss">
 </style>
-

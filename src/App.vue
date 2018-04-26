@@ -1,37 +1,20 @@
 <template>
   <div id="app">
       <div class="viewer">
-          <field
+          <field v-if="map"
               :size="size"
-              :margin="margin"
               :player="player"
               :map="map"/>
       </div>
+      <transition name="guide">
+          <guide v-if="isGuideVisible"/>
+      </transition>
   </div>
 </template>
 
 
 <script>
-let map = [
-    'wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww',
-    'w                                              w',
-    'w     w                                        w',
-    'w p              wwwwww wwwwwwww wwwwww        w',
-    'w                w    w w      w w    w        w',
-    'w                w    w w      w w    w        w',
-    'w     w          w    w w      w w    w        w',
-    'w   k w          wwwwww w      w w    w        w',
-    'w                       w      w w    w        w',
-    'wwwww www        wwwwww w      w w    w        w',
-    '    w w w        w    w w      w w    w        w',
-    '    w www        w    w w      w w    w        w',
-    '  www            w    w w      w w    w        w',
-    '  w              w    w wwwwwwww wwwwww        w',
-    '  w www          w    w                        w',
-    '  w w w          wwwwww                        w',
-    '  w w w                                        w',
-    '  wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww'
-];
+import TWEEN from "@tweenjs/tween.js";
 
 let findPlayerCoors = (map) => {
     let x = 0;
@@ -49,58 +32,148 @@ let findPlayerCoors = (map) => {
 
     throw new Error("Player not found!");
 }
-map = map.map((row) => row.split(''));
-console.log("!!!", findPlayerCoors(map))
+
+let mapRotation = (() => {
+    let mapList = [
+        '/dist/maps/tutorial.json',
+        '/dist/maps/map.json',
+        '/dist/maps/map2.json'
+    ];
+    let id = 0;
+    return () => {
+        let map = mapList[id];
+        id += 1;
+        if (mapList.length <= id) {
+            id = 0;
+        }
+        return map;
+    }
+})();
 
 export default {
     name: 'app',
     data () {
         return {
             size: 100,
-            margin: 10,
-            player: findPlayerCoors(map),
-            map,
+            player: {
+                x: 0,
+                y: 0,
+                speed: 150,
+                hasControl: false
+            },
+            finish: null,
+            map: null,
+            play: true,
+            control: {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            },
+            isGuideVisible: true,
+            isMapLoading: true
         }
     },
-
-    created: function() {
-        let savedTime = Date.now();
-        window.addEventListener("keydown", (event) => {
-            let now = Date.now()
-            if (now - savedTime >= 200) {
-                this.keyHandling(event);
-                savedTime = now;
+    created() {
+        window.addEventListener("keydown", this.keyHandling(true));
+        window.addEventListener("keyup", this.keyHandling(false));
+        let hideGuide = () => {
+            if (["KeyD"].includes(event.code)) {
+                this.isGuideVisible = false;
+                window.removeEventListener("keyup", hideGuide);
             }
-        });
+        };
+        window.addEventListener("keyup", hideGuide);
     },
-
-    beforeDestroy: function() {
-        window.removeEventListener("keydown", this.keyHandling);
+    beforeDestroy() {
+        this.play = false;
     },
-
+    mounted() {
+        this.loadMap(mapRotation());
+        let anim = (time) => {
+            this.play && requestAnimationFrame(anim);
+            TWEEN.update(time);
+            if (this.isMapLoading) {
+                return;
+            }
+            if (this.checkWinCondition()) {
+                this.isMapLoading = true;
+                this.loadMap(mapRotation());
+            }
+            this.handlePlayerMovement();
+        }
+        requestAnimationFrame(anim);
+    },
     methods: {
-        keyHandling: function(event) {
-            let size = this.$data.size;
-            let player = {...this.$data.player};
+        keyHandling(value) {
+            return (event) => {
+                let size = this.$data.size;
+                let player = {...this.$data.player};
 
-            if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
-                event.preventDefault();
-            }
+                if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
+                    event.preventDefault();
+                }
 
-            switch (event.code) {
-                case "KeyW": player.y -= 1; break;
-                case "KeyA": player.x -= 1; break;
-                case "KeyS": player.y += 1; break;
-                case "KeyD": player.x += 1; break;
-            }
-
-            if (this.$data.map[player.y][player.x] === 'w') {
-            } else {
-                this.$data.player.x = player.x;
-                this.$data.player.y = player.y;
+                switch (event.code) {
+                    case "KeyW": this.control.up = value; break;
+                    case "KeyA": this.control.left = value; break;
+                    case "KeyS": this.control.down = value; break;
+                    case "KeyD": this.control.right = value; break;
+                }
             }
         },
-    },
+        loadMap(mapName) {
+            this.player.hasControl = false;
+            let request = fetch(mapName);
+            request
+                .then((response) => {
+                    return response.json();
+                })
+                .then((rowMap) => {
+                    this.map = rowMap.map.map((row) => row.split(''));
+                    let {x, y} = findPlayerCoors(this.map);
+                    this.player.x = x;
+                    this.player.y = y;
+                    setTimeout(() => {
+                        this.player.hasControl = true;
+                        this.isMapLoading = false;
+                    }, 100);
+                });
+        },
+        handlePlayerMovement() {
+            if (this.player.hasControl) {
+                let coord = {
+                    x: this.player.x,
+                    y: this.player.y
+                }
+                if (this.control.left) {
+                    coord.x -= 1;
+                } else if (this.control.right) {
+                    coord.x += 1;
+                } else if (this.control.up) {
+                    coord.y -= 1;
+                } else if (this.control.down) {
+                    coord.y += 1;
+                }
+                if (this.map[this.player.y][coord.x] === 'w') {
+                    coord.x = this.player.x;
+                }
+                if (this.map[coord.y][this.player.x] === 'w') {
+                    coord.y = this.player.y;
+                }
+                this.player.x = coord.x;
+                this.player.y = coord.y;
+            }
+        },
+        checkWinCondition() {
+            if (this.player.hasControl) {
+                if (this.map[this.player.y][this.player.x] === 'f') {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 }
 </script>
 
@@ -114,7 +187,27 @@ export default {
   color: #2c3e50;
 }
 
-[type=range] {
-    width: 300px;
+body * {
+    pointer-events: none;
+}
+
+svg {
+    image-rendering: optimizeSpeed;             /* STOP SMOOTHING, GIVE ME SPEED  */
+    image-rendering: -moz-crisp-edges;          /* Firefox                        */
+    image-rendering: -o-crisp-edges;            /* Opera                          */
+    image-rendering: -webkit-optimize-contrast; /* Chrome (and eventually Safari) */
+    image-rendering: pixelated;                 /* Chrome */
+    image-rendering: optimize-contrast;         /* CSS3 Proposed                  */
+    -ms-interpolation-mode: nearest-neighbor;   /* IE8+                           */
+}
+
+.guide {
+    &-leave-active {
+        transition: opacity 0.4s;
+    }
+
+    &-leave-to {
+        opacity: 0;
+    }
 }
 </style>

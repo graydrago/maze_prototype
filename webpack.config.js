@@ -1,5 +1,6 @@
-var path = require('path')
-var webpack = require('webpack')
+const path = require('path');
+const webpack = require('webpack');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: './src/main.js',
@@ -83,6 +84,11 @@ module.exports = {
   performance: {
     hints: false
   },
+  plugins: [
+    new CopyWebpackPlugin([
+      { from: 'src/assets/maps', to: './maps' }
+    ])
+  ],
   devtool: '#eval-source-map'
 }
 
@@ -105,4 +111,4 @@ if (process.env.NODE_ENV === 'production') {
       minimize: true
     })
   ])
-}
+};
